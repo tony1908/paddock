@@ -96,6 +96,9 @@ sudo mv paddock /usr/local/bin/</code></pre>
         <li>A DNS name that points at the VPS, or a sslip.io name.</li>
         <li>CPU and RAM sized for the boxes you run. The installer sets no minimum.</li>
       </ul>
+
+      <h3>Running on a small VPS</h3>
+      <p>A 2 GB droplet ($12/mo) fits several idle or headless boxes, or about two with the desktop open. The desktop is off until someone uses it, and <code>paddock new --headless</code> boxes have none. See <a href="https://github.com/tony1908/paddock/blob/main/docs/self-hosting.md#memory">Memory</a> in self-hosting.md for measured numbers.</p>
     </section>
 
     <section class="wrap docs-section" id="docs" aria-labelledby="docs-title">
@@ -122,7 +125,7 @@ sudo mv paddock /usr/local/bin/</code></pre>
         <div class="recipes">
           <section class="recipe" id="create" aria-labelledby="create-title">
             <h3 id="create-title">Create a box and run a command</h3>
-            <p>Create a box, which becomes <code>current</code>, then run a command in it.</p>
+            <p>Create a box, which becomes <code>current</code>, then run a command in it. Add <code>--headless</code> for a box with no desktop, or <code>--resolution 1280x720</code> for a smaller one.</p>
             <div class="codeblock">
               <button class="copy" type="button" aria-label="Copy command">Copy</button>
               <pre><code>paddock new --type small --ttl 3600
@@ -202,7 +205,7 @@ paddock restore current &lt;snapshotId&gt;</code></pre>
 
           <section class="recipe" id="gui" aria-labelledby="gui-title">
             <h3 id="gui-title">Run a GUI app and see it</h3>
-            <p>Start an app on the box desktop, then save a screenshot of the desktop.</p>
+            <p>Start an app on the box desktop, then save a screenshot of the desktop. The desktop starts on first use and stops after 10 idle minutes.</p>
             <div class="codeblock">
               <button class="copy" type="button" aria-label="Copy command">Copy</button>
               <pre><code>paddock exec current --desktop --detach -- ./my-app

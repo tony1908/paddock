@@ -6,8 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `paddock new --headless` creates a box with no desktop (lowest memory), and `--resolution WxH` sets the desktop size (default 1920x1080). `PADDOCK_DESKTOP_IDLE_MINUTES` sets how long an idle desktop runs before it stops (default 10; `0` never stops it).
+
 ### Changed
 
+- The box desktop is off at boot and starts on demand: when the desktop URL is opened, `exec --desktop` runs, or a screenshot is taken. It stops after 10 idle minutes. The XFCE session runs only the window manager, settings daemon and panel. `exec --desktop` and `screenshot` return `409 desktop_disabled` on headless boxes.
+- New boxes get a 30-minute idle stop when no `--idle-stop` or `--no-auto-stop` option is given (`paddock-server --default-idle-stop`; `0` disables it). `paddock new --no-auto-stop` turns off both the TTL and idle stop.
+- `paddock-browser` (Chrome on amd64) runs with low-memory flags. Docker inside the box stops after 15 idle minutes with no containers and restarts on the next `docker` command.
+- Measured on a 2 GB droplet, an idle box with the desktop off uses about 60 MB (about 430 MB before), so a 2 GB host fits several idle or headless boxes.
 - The installer enables zram compressed swap (sized to RAM, up to 4 GiB; skip with `PADDOCK_ZRAM=0`), keeps the disk swap file as a fallback, and sets `GOMEMLIMIT` on the server and agent units (`PADDOCK_GOMEMLIMIT_SERVER` and `PADDOCK_GOMEMLIMIT_AGENT` override 256MiB and 128MiB). See the Memory section in `docs/self-hosting.md`.
 
 ## [0.2.1] - 2026-10-28

@@ -34,7 +34,7 @@ Public routes (no bearer token):
 
 ## Detached commands
 
-`POST /sandboxes/{id}/commands` with `detached: true` returns `202` and a `processId`. Detached commands allow `timeoutSeconds` up to 86400 (default 3600); sync commands allow 600. Add `stdin: true` to write to stdin later. Add `desktop: true` to run the command inside the box desktop session (`DISPLAY=:1` plus the session's bus and runtime variables) so GUI apps appear on the desktop; it runs as `abc` only and returns `409 desktop_not_running` when no session is up.
+`POST /sandboxes/{id}/commands` with `detached: true` returns `202` and a `processId`. Detached commands allow `timeoutSeconds` up to 86400 (default 3600); sync commands allow 600. Add `stdin: true` to write to stdin later. Add `desktop: true` to run the command inside the box desktop session (`DISPLAY=:1` plus the session's bus and runtime variables) so GUI apps appear on the desktop; it runs as `abc` only and returns `409 desktop_not_running` when no session is up, and `409 desktop_disabled` on a headless box.
 
 - Output: `GET .../commands/{pid}` returns output so far. Each stream keeps its last 1 MiB; `stdoutOffset`/`stderrOffset` count all bytes written.
 - Logs: `GET .../commands/{pid}/logs?stdoutOffset=N&stderrOffset=N[&follow=1]` streams NDJSON lines `{stream,data,offset}`. With `follow=1` it ends with `{exit:true,exitCode:N}` when the command exits.

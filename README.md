@@ -6,9 +6,9 @@ Paddock gives your AI agents computers and sandboxes on a VPS you own. Each agen
 
 ## Features
 
-- Full Ubuntu boxes with a web desktop, SSH access, and Docker-in-box (Sysbox).
+- Full Ubuntu boxes with a web desktop (started on demand, or none with `--headless`), SSH access, and Docker-in-box (Sysbox).
 - Box sizes from `xsmall` (1 CPU, 2 GiB) to `xlarge` (16 CPU, 32 GiB).
-- Auto-stop timers (`--ttl`, `--no-auto-stop`) and idle stop (`--idle-stop`).
+- Auto-stop timers (`--ttl`, `--no-auto-stop`) and idle stop (`--idle-stop`). New boxes idle-stop after 30 minutes unless you set `--idle-stop` or `--no-auto-stop`.
 - Filesystem snapshots taken periodically and on stop, with `resume`, `fork`, and `restore` (rollback). Retention per box with `--keep-snapshots`.
 - Named snapshots, snapshot download, and a local or S3-compatible restic repository.
 - Agent prompts (`paddock prompt`) for claude, codex, opencode, pi, prime, and kimi,
@@ -36,7 +36,8 @@ Paddock gives your AI agents computers and sandboxes on a VPS you own. Each agen
 - CPU and RAM sized for the boxes you run. The installer sets no hard minimum.
   The server admits a box only with headroom of the larger of 15% of RAM or 1 GiB,
   and assumes at least 300 MiB per box. If the host has no swap, the installer
-  adds up to 8 GiB.
+  adds up to 8 GiB. A 2 GB droplet fits several idle or headless boxes; see
+  [Memory](docs/self-hosting.md#memory) for measured sizes.
 
 The installer installs Docker, Sysbox, restic, and Traefik. See
 [docs/self-hosting.md](docs/self-hosting.md#requirements) for details.

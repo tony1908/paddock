@@ -53,7 +53,9 @@ run without a config file:
 
 `xsmall` (1 CPU, 2 GiB), `small` (2 CPU, 4 GiB), `default` (4 CPU, 8 GiB),
 `large` (8 CPU, 16 GiB), and `xlarge` (16 CPU, 32 GiB). `new` defaults to
-`default`; pass `--type xsmall` for a lighter box.
+`default`; pass `--type xsmall` for a lighter box. For less memory, pass
+`--headless` (no desktop; use it for code, tests and builds) or `--resolution 1280x720`
+(a smaller desktop; default 1920x1080).
 
 ## Commands
 
@@ -71,7 +73,7 @@ Common forms:
 ```sh
 paddock new [--type SIZE] [--image REF] [--ttl SECONDS | --no-auto-stop] [--idle-stop DURATION] \
           [-e KEY=VALUE]... [--setup-file FILE] [--from SNAPSHOT] [--environment ID | --no-env] \
-          [--tag KEY=VALUE]... [--keep-snapshots N] [--network MODE] [--allow-domain HOST]... [--allow-cidr CIDR]... [--deny-cidr CIDR]... \
+          [--headless] [--resolution WxH] [--tag KEY=VALUE]... [--keep-snapshots N] [--network MODE] [--allow-domain HOST]... [--allow-cidr CIDR]... [--deny-cidr CIDR]... \
           [--git URL [--revision X] [--depth N] [--git-token-env VAR] [--path P] | --tarball URL [--path P]]
 paddock list [--filter r|s|e...] [--all] [--tag KEY=VALUE|KEY]...
 paddock update <id|current> [--tag KEY=VALUE]... [--clear-tags] [--keep-snapshots N] [--network MODE] [--allow-domain HOST]... [--allow-cidr CIDR]... [--deny-cidr CIDR]...
@@ -189,7 +191,7 @@ Flags may appear before or after the box ID, but must come before `--`:
 - `--user NAME` runs as a box user (default `abc`).
 - `--cwd DIR` sets the working directory inside the box.
 - `--env KEY=VALUE` (repeatable) sets environment variables for the command.
-- `--desktop` runs the command inside the box desktop session (`DISPLAY=:1` plus the session's bus and runtime variables), so GUI apps appear on the desktop. Use it with `--detach` for apps that keep running. It runs as `abc` only and returns `409 desktop_not_running` when no session is up.
+- `--desktop` runs the command inside the box desktop session (`DISPLAY=:1` plus the session's bus and runtime variables), so GUI apps appear on the desktop. Use it with `--detach` for apps that keep running. It runs as `abc` only. It starts the desktop if it is off, returns `409 desktop_not_running` when no session comes up, and returns `409 desktop_disabled` on a headless box.
 - `--detach` starts the command in the background and prints its processId. `paddock ps <id>` lists detached commands, `paddock exec <id> --status PID` shows one, `paddock logs <id> PID [-f]` prints its output (`-f` follows until it exits), and `paddock kill <id> PID [--signal TERM]` signals it.
 
 `exec` exits with the command's exit code, so `paddock exec` works in shell conditions and CI. `logs -f` does the same once the command has exited. Other CLI failures exit with 1.
@@ -247,6 +249,12 @@ box is removed after the download.
 the same session in browser mode and accepts `--profile`. `--public` creates a
 publicly reachable URL with a seven-day session; without it the session lasts
 eight hours by default. See [desktop.md](desktop.md).
+
+The desktop is off at boot. `desktop`, `browser`, `exec --desktop`, and `screenshot` start it
+on demand, which takes a few seconds the first time. It stops after 10 idle minutes with no
+viewer and no open windows. Set `PADDOCK_DESKTOP_IDLE_MINUTES` with `paddock new -e` to change
+this (`0` never stops it). A `--headless` box has no desktop, so `exec --desktop` and
+`screenshot` return `409 desktop_disabled`.
 
 `host <id> <port>` exposes a TCP port from the box through the server;
 `--private` requires authentication to reach it.

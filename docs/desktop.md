@@ -9,6 +9,15 @@ A session is reused while it has more than 30 minutes left. Creating a session
 for a box that already has one with a different public/private mode replaces
 it.
 
+## Desktop startup
+
+The box desktop is off at boot. Opening the desktop URL (`paddock desktop`, or
+the dashboard), running `exec --desktop`, or taking a screenshot starts it. That
+takes a few seconds the first time. It stops after 10 idle minutes with no
+connected viewer and no open windows. Set `PADDOCK_DESKTOP_IDLE_MINUTES` on the
+box with `paddock new -e` (`0` never stops it). `paddock new --headless` has no
+desktop, and `--resolution WxH` sets its size (default 1920x1080).
+
 ## Storage and restarts
 
 The server stores the session token encrypted in its database. On startup it

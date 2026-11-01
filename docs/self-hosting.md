@@ -23,7 +23,7 @@ are not yet verified. The local `runc` end-to-end path is covered by
   CPUs and 2, 4, 8, 16, or 32 GiB of RAM. The server admits a new box only when
   the host has room after a buffer equal to the larger of 15% of RAM or 1 GiB,
   and admission assumes at least 300 MiB per box. The installer has no hard
-  minimum.
+  minimum. See [Memory](#memory) for measured sizes and the smallest droplet.
 - Swap: if the host has none, the installer creates a swap file at
   `/var/lib/paddock/swapfile`, sized to RAM and capped at 8 GiB, as a fallback
   behind zram (see [Memory](#memory)).
@@ -174,6 +174,20 @@ To change the limits later, edit the `Environment=GOMEMLIMIT=` line in the unit
 file, then run `sudo systemctl daemon-reload && sudo systemctl restart paddock-server paddock-agent`.
 An upgrade rewrites the unit files, so re-apply the change afterwards, or pass
 the variables when you run `--upgrade`.
+
+Measured on a 2 GB, 1 vCPU DigitalOcean droplet (`s-1vcpu-2gb`, $12/mo):
+
+| Box state | Memory |
+| --- | --- |
+| Idle, desktop off (default) | about 60 MB |
+| Headless (`--headless`) | about 20 MB |
+| Desktop on (1920x1080) | about 380 MB (about 160 MB at 1280x720) |
+| Chrome open | about 830 MB |
+
+The 2 GB droplet is the smallest size measured so far. It fits several idle or
+headless boxes, or about two with the desktop open. Smaller hosts are not
+measured. Boxes without an idle-stop setting also get a 30-minute idle stop by
+default (`paddock-server --default-idle-stop`; `0` disables it).
 
 ## Host settings
 
