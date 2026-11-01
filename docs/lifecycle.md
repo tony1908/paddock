@@ -37,6 +37,8 @@ out does not change the timer.
 
 Idle stop is a separate setting. The CLI exposes it as `--idle-stop` on `new`
 and `extend`.
+Boxes created without an `idleStopSeconds` value get the server default, 30 minutes
+(`paddock-server --default-idle-stop`; `0` disables it, and `--no-auto-stop` always sends an explicit `null`).
 
 ## Sandbox response
 

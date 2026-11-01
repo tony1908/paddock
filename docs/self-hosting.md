@@ -25,8 +25,8 @@ are not yet verified. The local `runc` end-to-end path is covered by
   and admission assumes at least 300 MiB per box. The installer has no hard
   minimum.
 - Swap: if the host has none, the installer creates a swap file at
-  `/var/lib/paddock/swapfile`, sized to RAM and capped at 8 GiB, and sets
-  `vm.swappiness=10`.
+  `/var/lib/paddock/swapfile`, sized to RAM and capped at 8 GiB, as a fallback
+  behind zram (see [Memory](#memory)).
 
 The installer installs Docker, Sysbox (`sysbox-ce` 0.7.1 by default), restic,
 and Traefik, pulls the box and tools images, and writes systemd units.
@@ -143,6 +143,37 @@ and each IPv4 address it returns is opened for that box before the answer is sen
   allow it there as well, or allowlist boxes will not resolve names.
 - Boxes created before the forwarder keep their old resolver and are not
   filtered by name. Recreate them to use the forwarder.
+
+## Memory
+
+Targets small droplets (Ubuntu 24.04, often 2 GB RAM). The installer:
+
+- Enables zram: compressed swap in RAM, sized `min(RAM / 2, 4 GiB)`, zstd, swap
+  priority 100. It installs `systemd-zram-generator`, writes
+  `/etc/systemd/zram-generator.conf`, and sets `vm.swappiness=100` and
+  `vm.page-cluster=0` in `/etc/sysctl.d/99-paddock-zram.conf`. The disk swap file
+  keeps priority 10 as a fallback.
+- Sets `GOMEMLIMIT=256MiB` on `paddock-server` and `GOMEMLIMIT=128MiB` on
+  `paddock-agent` so the Go runtime collects garbage before it grows past those
+  limits.
+- Prints the kernel version and whether Sysbox can share box image pages in
+  memory. Sharing needs kernel 5.12 or newer (ID-mapped mounts); older kernels
+  may copy each box's image.
+
+zram is skipped with a note, and the install continues, if the package or the
+service cannot be set up. Set `PADDOCK_ZRAM=0` in the environment to skip it.
+Re-running the installer or `--upgrade` rewrites these files with the same values.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `PADDOCK_ZRAM` | `1` | Set to `0` to skip zram swap. |
+| `PADDOCK_GOMEMLIMIT_SERVER` | `256MiB` | `GOMEMLIMIT` for `paddock-server`. Go size: bytes or `KiB`/`MiB`/`GiB`/`TiB`. |
+| `PADDOCK_GOMEMLIMIT_AGENT` | `128MiB` | `GOMEMLIMIT` for `paddock-agent`. Same format. |
+
+To change the limits later, edit the `Environment=GOMEMLIMIT=` line in the unit
+file, then run `sudo systemctl daemon-reload && sudo systemctl restart paddock-server paddock-agent`.
+An upgrade rewrites the unit files, so re-apply the change afterwards, or pass
+the variables when you run `--upgrade`.
 
 ## Host settings
 

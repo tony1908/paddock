@@ -77,6 +77,8 @@ type Agent struct {
 	boxdTokens           map[string]string
 	desktopPasswords     map[string]string
 	forwardAuth          map[string]authCredential
+	desktopStartMu       sync.Mutex
+	desktopStarts        map[string]*desktopStart // box ID -> background desktop start state; guarded by desktopStartMu
 	processes            map[string]*execProcess
 	snapshotFingerprints map[string]string
 	toolsWarning         sync.Once
@@ -94,6 +96,7 @@ type authCredential struct {
 	boxID     string
 	hash      string
 	expiresAt time.Time
+	desktop   bool // desktop host: a successful forward auth starts the desktop
 }
 
 type createRequest struct {
@@ -229,7 +232,8 @@ func New(config Config, docker *dockercli.Docker, snapshots *snapshot.Engine) *A
 	return &Agent{
 		config: config, docker: docker, snapshots: snapshots,
 		boxdTokens: make(map[string]string), desktopPasswords: make(map[string]string), forwardAuth: make(map[string]authCredential),
-		processes: make(map[string]*execProcess), snapshotFingerprints: make(map[string]string), storageInitLocks: make(map[string]*sync.Mutex),
+		desktopStarts: make(map[string]*desktopStart),
+		processes:     make(map[string]*execProcess), snapshotFingerprints: make(map[string]string), storageInitLocks: make(map[string]*sync.Mutex),
 		firewall: ExecExecutor{}, readFile: os.ReadFile,
 	}
 }
@@ -858,7 +862,11 @@ func (a *Agent) execBox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Desktop {
-		desktop, err := a.desktopEnv(r.Context(), boxName(r.PathValue("id")))
+		desktop, err := a.ensureDesktop(r.Context(), boxName(r.PathValue("id")))
+		if errors.Is(err, errDesktopDisabled) {
+			writeError(w, http.StatusConflict, "desktop_disabled", "box is headless; the desktop is disabled")
+			return
+		}
 		if errors.Is(err, errDesktopNotRunning) {
 			writeError(w, http.StatusConflict, "desktop_not_running", "box desktop session is not running")
 			return

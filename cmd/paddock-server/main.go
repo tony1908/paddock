@@ -34,6 +34,7 @@ func main() {
 	publicURL := flag.String("public-url", "http://localhost:8080", "public server URL")
 	image := flag.String("image", "ghcr.io/tony1908/paddock-box:latest", "default box image")
 	snapshotInterval := flag.Duration("snapshot-interval", envDuration("PADDOCK_SNAPSHOT_INTERVAL", time.Minute), "periodic snapshot interval")
+	defaultIdleStop := flag.Duration("default-idle-stop", 30*time.Minute, "idle stop applied to boxes created without idleStopSeconds (0 disables; minimum 5m)")
 	desktopSessionTTL := flag.Duration("desktop-session-ttl", envDuration("PADDOCK_DESKTOP_SESSION_TTL", 8*time.Hour), "desktop session lifetime")
 	snapshotBusyInterval := flag.Duration("snapshot-busy-interval", envDuration("PADDOCK_SNAPSHOT_BUSY_INTERVAL", 5*time.Minute), "minimum interval after repeated changed snapshots")
 	memoryOvercommit := flag.Float64("memory-overcommit", 1.0, "memory reservation headroom factor (1.0 admits reservations up to 90% of node RAM)")
@@ -54,7 +55,7 @@ func main() {
 	}
 	defer func() { _ = db.Close() }()
 	srv, err := server.New(server.Config{
-		Store: db, DataDir: *dataDir, PublicURL: *publicURL, Image: *image, ToolsImage: os.Getenv("PADDOCK_TOOLS_IMAGE"), SnapshotInterval: *snapshotInterval, SnapshotBusyInterval: *snapshotBusyInterval, DesktopSessionTTL: *desktopSessionTTL, MemoryOvercommit: *memoryOvercommit, AdmissionMode: *admissionMode, AdmissionBufferPercent: *bufferPercent, AdmissionBufferMin: *bufferMin, AdmissionExpectedBox: *expectedBox, AdmissionPSIMax: *psiMax, AdmissionSwapAllowance: *swapAllowance,
+		Store: db, DataDir: *dataDir, PublicURL: *publicURL, Image: *image, ToolsImage: os.Getenv("PADDOCK_TOOLS_IMAGE"), SnapshotInterval: *snapshotInterval, SnapshotBusyInterval: *snapshotBusyInterval, DefaultIdleStop: *defaultIdleStop, DesktopSessionTTL: *desktopSessionTTL, MemoryOvercommit: *memoryOvercommit, AdmissionMode: *admissionMode, AdmissionBufferPercent: *bufferPercent, AdmissionBufferMin: *bufferMin, AdmissionExpectedBox: *expectedBox, AdmissionPSIMax: *psiMax, AdmissionSwapAllowance: *swapAllowance,
 		BootstrapJoinToken: os.Getenv("PADDOCK_BOOTSTRAP_JOIN_TOKEN"),
 		BootstrapNodeName:  os.Getenv("PADDOCK_BOOTSTRAP_NODE_NAME"),
 		BootstrapHostBase:  os.Getenv("PADDOCK_BOOTSTRAP_HOST_BASE"),

@@ -36,6 +36,7 @@ type Config struct {
 	SnapshotInterval       time.Duration
 	SnapshotBusyInterval   time.Duration
 	DesktopSessionTTL      time.Duration
+	DefaultIdleStop        time.Duration // applied when a create request omits idleStopSeconds; 0 disables
 	MemoryOvercommit       float64
 	AdmissionMode          string
 	AdmissionBufferPercent float64
@@ -140,6 +141,11 @@ func New(cfg Config) (*Server, error) {
 	}
 	if cfg.SnapshotBusyInterval <= 0 {
 		cfg.SnapshotBusyInterval = 5 * time.Minute
+	}
+	if cfg.DefaultIdleStop != 0 {
+		if seconds := int64(cfg.DefaultIdleStop / time.Second); seconds < minimumIdleStopSeconds || seconds > maximumIdleStopSeconds {
+			return nil, fmt.Errorf("default idle stop must be 0 or between %d seconds and %d seconds", minimumIdleStopSeconds, maximumIdleStopSeconds)
+		}
 	}
 	if cfg.AdmissionMode == "" {
 		cfg.AdmissionMode = "usage"

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Browser entry point (BROWSER=paddock-browser). Adds low-memory flags when the real browser is Chrome/Chromium.
+set -euo pipefail
+
+real=/usr/local/bin/paddock-browser-real
+flags=()
+
+case "$(basename "$(readlink -f "$real")")" in
+    chrome|google-chrome|chromium|chromium-browser)
+        flags=(
+            --renderer-process-limit=2
+            --disable-gpu
+            --disable-extensions
+            --disable-background-networking
+            --disable-component-update
+            --disable-features=Translate,MediaRouter,OptimizationHints
+            --process-per-site
+        )
+        ;;
+esac
+
+exec "$real" "${flags[@]}" "$@"

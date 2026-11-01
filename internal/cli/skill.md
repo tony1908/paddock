@@ -12,6 +12,7 @@ description: Use when the user asks to run something in a cloud box, sandbox, or
 ## Lifecycle
 
 - `paddock new --type small --ttl 3600` creates a box that auto-stops after an hour. `--idle-stop 30m` enables idle stop (Go durations from 5m to 720h). Sizes are `xsmall|small|default|large|xlarge`. Use `--ttl SECONDS` for a custom timer or `--no-auto-stop` for an always-on box. Creation records the box as `current`.
+- `--headless` creates a box without a desktop (lowest memory; use it for code, tests and builds). `--resolution 1280x720` sets a smaller desktop. The desktop starts when first used and stops after 10 idle minutes.
 - `paddock extend <id|current> --hours 2`, `--ttl SECONDS`, or `--no-auto-stop` changes its timer. Use `--idle-stop 30m` or `--idle-stop off` to set or disable idle stop.
 - `paddock info <id|current>` shows box details. `paddock list` shows running boxes by default; use `--filter r|s|e` or `--all` to choose a state group or show all boxes.
 - `paddock current` prints the most recently created or used box ID. Lifecycle commands accept `current` in place of an ID.

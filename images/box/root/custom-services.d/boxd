@@ -3,4 +3,5 @@ set -e
 
 export HOME=/config
 export PATH="/opt/paddock-tools/bin:$PATH"
+export GOMEMLIMIT="${GOMEMLIMIT:-64MiB}"
 exec s6-setuidgid abc boxd serve
