@@ -223,7 +223,7 @@ func (a *Agent) renderRoutes(ctx context.Context, boxID string, request routesRe
 		middlewares["box-"+boxID+"-desktop-headers"] = map[string]any{"headers": map[string]any{"customRequestHeaders": map[string]string{"Authorization": passwordHeader}}}
 		routers["box-"+boxID+"-desktop"].(map[string]any)["middlewares"] = []string{"box-" + boxID + "-forward-auth", "box-" + boxID + "-desktop-headers"}
 		services["box-"+boxID+"-desktop"] = map[string]any{"loadBalancer": map[string]any{"servers": []map[string]string{{"url": "http://{{BOX_IP}}:3000"}}}}
-		credentials[desktop.Host] = authCredential{boxID: boxID, hash: desktop.TokenHash, expiresAt: desktop.ExpiresAt}
+		credentials[desktop.Host] = authCredential{boxID: boxID, hash: desktop.TokenHash, expiresAt: desktop.ExpiresAt, desktop: true}
 	}
 	for index, host := range request.Hosts {
 		name := fmt.Sprintf("box-%s-host-%d", boxID, index)

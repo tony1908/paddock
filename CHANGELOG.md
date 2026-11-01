@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The installer enables zram compressed swap (sized to RAM, up to 4 GiB; skip with `PADDOCK_ZRAM=0`), keeps the disk swap file as a fallback, and sets `GOMEMLIMIT` on the server and agent units (`PADDOCK_GOMEMLIMIT_SERVER` and `PADDOCK_GOMEMLIMIT_AGENT` override 256MiB and 128MiB). See the Memory section in `docs/self-hosting.md`.
+
 ## [0.2.1] - 2026-10-28
 
 ### Changed

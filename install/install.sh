@@ -78,7 +78,8 @@ configure_swap() {
     fi
     chmod 0600 "$swapfile"
     if ((created)); then mkswap -f "$swapfile"; fi
-    swapon "$swapfile"
+    # Lower priority than zram (100), so the disk swap is only a fallback.
+    swapon -p 10 "$swapfile"
     printf 'Paddock: enabled %s MiB of host swap.\n' "$size_mib"
   fi
   if [[ ! -e /etc/sysctl.d/99-paddock-swap.conf ]]; then
@@ -86,6 +87,60 @@ configure_swap() {
 vm.swappiness = 10
 SYSCTL
     sysctl -w vm.swappiness=10
+  fi
+}
+
+configure_zram() {
+  local conf=/etc/systemd/zram-generator.conf sysctl_conf=/etc/sysctl.d/99-paddock-zram.conf
+  if [[ "${PADDOCK_ZRAM:-1}" == 0 ]]; then
+    printf 'Paddock: PADDOCK_ZRAM=0; skipping zram swap.\n'
+    return 0
+  fi
+  if ! DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 install -y systemd-zram-generator; then
+    printf 'Paddock: could not install systemd-zram-generator; skipping zram swap.\n' >&2
+    return 0
+  fi
+  cat > "$conf" <<'ZRAM'
+[zram0]
+zram-size = min(ram / 2, 4096)
+compression-algorithm = zstd
+swap-priority = 100
+ZRAM
+  systemctl daemon-reload
+  # DigitalOcean's Ubuntu kernel ships the zram module in linux-modules-extra-$(uname -r).
+  if ! modprobe zram 2>/dev/null; then
+    DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 install -y "linux-modules-extra-$(uname -r)" || true
+    if ! modprobe zram 2>/dev/null; then
+      printf 'Paddock: zram module unavailable for kernel %s; skipping zram swap.\n' "$(uname -r)" >&2
+      return 0
+    fi
+  fi
+  if ! systemctl start systemd-zram-setup@zram0.service; then
+    printf 'Paddock: could not start zram swap (systemd-zram-setup@zram0); skipping it.\n' >&2
+    return 0
+  fi
+  if ! swapon --show | grep -q zram0; then
+    systemctl start dev-zram0.swap || true
+  fi
+  # Sorts after 99-paddock-swap.conf, so its swappiness=100 wins over swappiness=10.
+  cat > "$sysctl_conf" <<'SYSCTL'
+vm.swappiness = 100
+vm.page-cluster = 0
+SYSCTL
+  sysctl --system >/dev/null
+  printf 'Paddock: enabled zram swap (compressed RAM, priority 100).\n'
+}
+
+report_page_cache_sharing() {
+  local release major minor
+  release="$(uname -r)"
+  major="${release%%.*}"
+  minor="${release#*.}"
+  minor="${minor%%[!0-9]*}"
+  if ((major > 5 || (major == 5 && minor >= 12))); then
+    printf 'Kernel %s: Sysbox will use ID-mapped mounts; box image files are shared in memory across boxes.\n' "$release"
+  else
+    printf 'Kernel %s < 5.12: Sysbox may copy each box'\''s image; memory sharing between boxes is reduced.\n' "$release"
   fi
 }
 
@@ -239,7 +294,12 @@ ensure_box_image() {
 }
 
 write_systemd_units() {
-  cat > /etc/systemd/system/paddock-server.service <<'UNIT'
+  local gomemlimit_server="${PADDOCK_GOMEMLIMIT_SERVER:-256MiB}" gomemlimit_agent="${PADDOCK_GOMEMLIMIT_AGENT:-128MiB}"
+  if [[ ! "$gomemlimit_server" =~ ^[0-9]+(B|KiB|MiB|GiB|TiB)?$ || ! "$gomemlimit_agent" =~ ^[0-9]+(B|KiB|MiB|GiB|TiB)?$ ]]; then
+    printf 'PADDOCK_GOMEMLIMIT_SERVER and PADDOCK_GOMEMLIMIT_AGENT must be Go memory sizes such as 256MiB.\n' >&2
+    exit 2
+  fi
+  sed "s|@GOMEMLIMIT@|${gomemlimit_server}|" > /etc/systemd/system/paddock-server.service <<'UNIT'
 [Unit]
 Description=Paddock control plane server
 After=network-online.target docker.service
@@ -248,6 +308,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 Environment=PADDOCK_MEMORY_OVERCOMMIT=1.0
+Environment=GOMEMLIMIT=@GOMEMLIMIT@
 EnvironmentFile=/etc/paddock/server.env
 ExecStart=/usr/local/bin/paddock-server --addr :8080 --data-dir /var/lib/paddock --public-url ${PADDOCK_PUBLIC_URL} --image ${PADDOCK_IMAGE} --snapshot-interval ${PADDOCK_SNAPSHOT_INTERVAL} --memory-overcommit ${PADDOCK_MEMORY_OVERCOMMIT}
 Restart=on-failure
@@ -259,7 +320,7 @@ UMask=0077
 WantedBy=multi-user.target
 UNIT
 
-  cat > /etc/systemd/system/paddock-agent.service <<'UNIT'
+  sed "s|@GOMEMLIMIT@|${gomemlimit_agent}|" > /etc/systemd/system/paddock-agent.service <<'UNIT'
 [Unit]
 Description=Paddock local agent
 After=network-online.target docker.service paddock-server.service
@@ -268,6 +329,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=/etc/paddock/agent.env
+Environment=GOMEMLIMIT=@GOMEMLIMIT@
 ExecStart=/usr/local/bin/paddock-agent
 Restart=always
 RestartSec=5
@@ -422,6 +484,7 @@ upgrade_install() {
   upgrade_sysbox_if_needed
   configure_userns
   configure_swap
+  configure_zram
   install -d -m 0750 /etc/paddock /var/lib/paddock
 
   image="ghcr.io/tony1908/paddock-box:latest"
@@ -535,9 +598,11 @@ if command -v cloud-init >/dev/null 2>&1; then cloud-init status --wait >/dev/nu
 apt-get -o DPkg::Lock::Timeout=600 update
 apt-get -o DPkg::Lock::Timeout=600 install -y ca-certificates curl gnupg jq openssl procps restic unzip
 configure_swap
+configure_zram
 install_docker
 # Install Sysbox before starting any containers.
 install_sysbox
+report_page_cache_sharing
 ensure_box_image
 if [[ "$TOOLS_IMAGE" != "none" ]] && ! docker image inspect "$TOOLS_IMAGE" >/dev/null 2>&1; then docker pull "$TOOLS_IMAGE"; fi
 docker network inspect paddock-net >/dev/null 2>&1 || docker network create --driver bridge --opt com.docker.network.bridge.enable_icc=false paddock-net >/dev/null

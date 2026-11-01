@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -660,6 +661,8 @@ func (c *CLI) newSandbox(ctx context.Context, args []string) error {
 	fs.Var(&envVars, "env", "environment variable KEY=VALUE (repeatable; legacy environment ID also accepted)")
 	environment := fs.String("environment", "", "environment ID")
 	noEnv := fs.Bool("no-env", false, "disable the default environment")
+	headless := fs.Bool("headless", false, "create the box without a desktop (lowest memory)")
+	resolution := fs.String("resolution", "", "desktop resolution WxH, e.g. 1280x720 (default 1920x1080)")
 	from := fs.String("from", "", "named snapshot to restore")
 	setupFile := fs.String("setup-file", "", "setup script file")
 	gitURL := fs.String("git", "", "clone this https git repository into the sandbox on first boot")
@@ -679,10 +682,13 @@ func (c *CLI) newSandbox(ctx context.Context, args []string) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: paddock new [--mount DRIVE:PATH[:ro]]... [--type SIZE] [--image REF] [--ttl SECONDS] [--no-auto-stop] [-e KEY=VALUE]... [--setup-file FILE] [--git URL [--revision X] [--depth N] [--git-token-env VAR] [--path P] | --tarball URL [--path P]] [--from NAME] [--environment NAME] [--no-env] [--tag KEY=VALUE]... [--keep-snapshots N] [--network MODE] [--allow-domain HOST]... [--allow-cidr CIDR]... [--deny-cidr CIDR]")
+		return errors.New("usage: paddock new [--mount DRIVE:PATH[:ro]]... [--type SIZE] [--image REF] [--ttl SECONDS] [--no-auto-stop] [-e KEY=VALUE]... [--setup-file FILE] [--git URL [--revision X] [--depth N] [--git-token-env VAR] [--path P] | --tarball URL [--path P]] [--from NAME] [--environment NAME] [--no-env] [--headless] [--resolution WxH] [--tag KEY=VALUE]... [--keep-snapshots N] [--network MODE] [--allow-domain HOST]... [--allow-cidr CIDR]... [--deny-cidr CIDR]")
 	}
 	if *noAutoStop && flagWasSet(fs, "ttl") {
 		return errors.New("--ttl and --no-auto-stop are mutually exclusive")
+	}
+	if flagWasSet(fs, "resolution") && !resolutionPattern.MatchString(*resolution) {
+		return errors.New("--resolution must be WxH with 3 to 4 digits per side, such as 1280x720")
 	}
 	body := map[string]any{"type": *boxType}
 	if *image != "" {
@@ -697,6 +703,8 @@ func (c *CLI) newSandbox(ctx context.Context, args []string) error {
 			return err
 		}
 		body["idleStopSeconds"] = seconds
+	} else if *noAutoStop {
+		body["idleStopSeconds"] = nil // always-on: no idle stop either
 	}
 	if *noAutoStop {
 		body["ttlSeconds"] = nil
@@ -717,6 +725,17 @@ func (c *CLI) newSandbox(ctx context.Context, args []string) error {
 			return errors.New("environment variable name cannot be empty")
 		}
 		env[key] = value
+	}
+	// Flag-derived env vars; an explicit -e KEY=VALUE for the same key wins.
+	if *headless {
+		if _, ok := env["PADDOCK_HEADLESS"]; !ok {
+			env["PADDOCK_HEADLESS"] = "1"
+		}
+	}
+	if flagWasSet(fs, "resolution") {
+		if _, ok := env["PADDOCK_RESOLUTION"]; !ok {
+			env["PADDOCK_RESOLUTION"] = *resolution
+		}
 	}
 	if len(env) != 0 {
 		body["env"] = env
@@ -2019,6 +2038,8 @@ func (c *CLI) extend(ctx context.Context, args []string) error {
 	}
 	return c.printValue(unwrap(result, "sandbox"))
 }
+
+var resolutionPattern = regexp.MustCompile(`^[0-9]{3,4}x[0-9]{3,4}$`)
 
 func parseIdleStopFlag(value string) (int64, error) {
 	if strings.EqualFold(strings.TrimSpace(value), "off") {

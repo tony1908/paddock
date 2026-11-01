@@ -15,7 +15,7 @@ var commandUsage = map[string]string{
 	"whoami":        "usage: paddock whoami\n",
 	"current":       "usage: paddock current\n",
 	"skill":         "usage: paddock skill install [--claude] [--codex] [--force]\n",
-	"new":           "usage: paddock new [--mount DRIVE:PATH[:ro]]... [--type SIZE] [--image REF] [--ttl SECONDS] [--no-auto-stop] [-e KEY=VALUE]... [--setup-file FILE] [--git URL [--revision X] [--depth N] [--git-token-env VAR] [--path P] | --tarball URL [--path P]] [--from NAME] [--environment NAME] [--no-env] [--tag KEY=VALUE]... [--keep-snapshots N] [--network MODE] [--allow-domain HOST]... [--allow-cidr CIDR]... [--deny-cidr CIDR]...\n",
+	"new":           "usage: paddock new [--mount DRIVE:PATH[:ro]]... [--type SIZE] [--image REF] [--ttl SECONDS] [--no-auto-stop] [-e KEY=VALUE]... [--setup-file FILE] [--git URL [--revision X] [--depth N] [--git-token-env VAR] [--path P] | --tarball URL [--path P]] [--from NAME] [--environment NAME] [--no-env] [--headless] [--resolution WxH] [--tag KEY=VALUE]... [--keep-snapshots N] [--network MODE] [--allow-domain HOST]... [--allow-cidr CIDR]... [--deny-cidr CIDR]...\n",
 	"list":          "usage: paddock list [--filter r|s|e...] [--all] [--tag KEY=VALUE]... [--json]\n",
 	"get":           "usage: paddock get <id>\n",
 	"info":          "usage: paddock info <id|current>\n",

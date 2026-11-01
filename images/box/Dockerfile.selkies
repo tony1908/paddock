@@ -23,6 +23,7 @@ RUN apt-get update \
         fonts-liberation \
         fonts-noto-color-emoji \
         git \
+        iproute2 \
         jq \
         openssh-server \
         scrot \
@@ -36,7 +37,34 @@ RUN apt-get update \
         xfwm4 \
         xdotool \
     && rm -f /etc/s6-overlay/s6-rc.d/user/contents.d/svc-docker \
-    && rm -f /etc/xdg/autostart/xfdesktop.desktop /etc/xdg/autostart/thunar.desktop \
+        /etc/s6-overlay/s6-rc.d/user/contents.d/svc-de \
+        /etc/s6-overlay/s6-rc.d/user/contents.d/svc-selkies \
+        /etc/s6-overlay/s6-rc.d/user/contents.d/svc-xorg \
+        /etc/s6-overlay/s6-rc.d/user/contents.d/svc-pulseaudio \
+        /etc/s6-overlay/s6-rc.d/user/contents.d/svc-dbus \
+        /etc/s6-overlay/s6-rc.d/user/contents.d/svc-xsettingsd \
+        /etc/s6-overlay/s6-rc.d/user/contents.d/svc-watchdog \
+    && rm -f /etc/xdg/autostart/xfdesktop.desktop \
+        /etc/xdg/autostart/thunar.desktop \
+        /etc/xdg/autostart/xfce4-power-manager.desktop \
+        /etc/xdg/autostart/xfce4-notifyd.desktop \
+        /etc/xdg/autostart/xfce4-screensaver.desktop \
+        /etc/xdg/autostart/light-locker.desktop \
+        /etc/xdg/autostart/xscreensaver.desktop \
+        /etc/xdg/autostart/at-spi-dbus-bus.desktop \
+        /etc/xdg/autostart/polkit-gnome-authentication-agent-1.desktop \
+        /etc/xdg/autostart/xfce-polkit.desktop \
+        /etc/xdg/autostart/nm-applet.desktop \
+        /etc/xdg/autostart/blueman.desktop \
+        /etc/xdg/autostart/print-applet.desktop \
+        /etc/xdg/autostart/update-notifier.desktop \
+        /etc/xdg/autostart/pulseaudio.desktop \
+        /etc/xdg/autostart/xiccd.desktop \
+        /etc/xdg/autostart/geoclue-demo-agent.desktop \
+        /etc/xdg/autostart/gnome-keyring-pkcs11.desktop \
+        /etc/xdg/autostart/gnome-keyring-secrets.desktop \
+        /etc/xdg/autostart/gnome-keyring-ssh.desktop \
+        /etc/xdg/autostart/xfce4-clipman-plugin-autostart.desktop \
     && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
@@ -57,14 +85,15 @@ RUN set -eux; \
     else \
         echo "unsupported architecture: ${TARGETARCH}" >&2; exit 1; \
     fi; \
-    ln -s "$(command -v google-chrome || command -v firefox)" /usr/local/bin/paddock-browser; \
+    ln -s "$(command -v google-chrome || command -v firefox)" /usr/local/bin/paddock-browser-real; \
     rm -rf /var/lib/apt/lists/*
 
 ENV START_DOCKER=false \
     SELKIES_IS_MANUAL_RESOLUTION_MODE=true \
     SELKIES_MANUAL_WIDTH=1920 \
     SELKIES_MANUAL_HEIGHT=1080 \
-    BROWSER=paddock-browser
+    BROWSER=paddock-browser \
+    NO_AT_BRIDGE=1
 
 COPY --from=boxd-build /out/boxd /usr/local/bin/boxd
 COPY images/box/root/ /
@@ -75,8 +104,11 @@ RUN chmod 0755 \
         /custom-cont-init.d/01-paddock-ssh-hostkeys \
         /custom-cont-init.d/10-paddock-setup \
         /custom-services.d/boxd \
+        /custom-services.d/paddock-idle \
         /custom-services.d/sshd \
         /usr/local/bin/docker \
+        /usr/local/bin/paddock-browser \
+        /usr/local/bin/paddock-desktop \
         /defaults/startwm.sh \
     && install -d -m 0755 /run/sshd /var/lib/docker \
     && printf '%s\n' \

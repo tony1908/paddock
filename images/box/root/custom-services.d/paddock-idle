@@ -1,0 +1,89 @@
+#!/usr/bin/with-contenv bash
+# Stops the desktop after PADDOCK_DESKTOP_IDLE_MINUTES idle minutes (default 10, 0 = never)
+# and dockerd after 15 idle minutes. Checks once a minute, runs as root.
+set -u
+
+desktop_cmd=/usr/local/bin/paddock-desktop
+docker_bin=/usr/bin/docker
+docker_socket=unix:///var/run/docker.sock
+docker_idle_limit=15
+desktop_idle_count=0
+docker_idle_count=0
+
+# Reads KEY from /run/paddock/env, falling back to the container environment.
+setting() {
+    local key=$1 value=""
+    if [ -r /run/paddock/env ]; then
+        value=$(sed -n "s/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}$key=//p" /run/paddock/env | tail -n 1 | tr -d "\"'")
+    fi
+    if [ -z "$value" ]; then
+        value=${!key:-}
+    fi
+    printf '%s' "$value"
+}
+
+# True when a TCP connection is established to local port 3000 (nginx).
+desktop_connected() {
+    if command -v ss >/dev/null 2>&1; then
+        [ -n "$(ss -Htn state established '( sport = :3000 )' 2>/dev/null)" ]
+    else
+        awk 'NR > 1 && $4 == "01" && $2 ~ /:0BB8$/ { found = 1 } END { exit !found }' /proc/net/tcp /proc/net/tcp6
+    fi
+}
+
+# True when the desktop is running with no connected client and no normal (non-sticky) windows.
+desktop_idle() {
+    local windows normal
+    "$desktop_cmd" status >/dev/null 2>&1 || return 1
+    desktop_connected && return 1
+    # wmctrl fails without a window manager; that counts as zero windows.
+    windows=$(s6-setuidgid abc env DISPLAY=:1 wmctrl -l 2>/dev/null) || windows=""
+    normal=$(printf '%s\n' "$windows" | awk 'NF && $2 != "-1" { n++ } END { print n + 0 }')
+    [ "$normal" -eq 0 ]
+}
+
+check_desktop() {
+    local limit
+    limit=$(setting PADDOCK_DESKTOP_IDLE_MINUTES)
+    [[ $limit =~ ^[0-9]+$ ]] || limit=10
+    if ! desktop_idle; then
+        desktop_idle_count=0
+        return
+    fi
+    desktop_idle_count=$((desktop_idle_count + 1))
+    if [ "$limit" -gt 0 ] && [ "$desktop_idle_count" -ge "$limit" ]; then
+        if "$desktop_cmd" stop; then
+            echo "paddock-idle: desktop stopped after $desktop_idle_count idle minutes"
+        else
+            echo "paddock-idle: desktop stop failed"
+        fi
+        desktop_idle_count=0
+    fi
+}
+
+# True when dockerd is running and reports no running containers.
+docker_idle() {
+    local out
+    pgrep -x dockerd >/dev/null 2>&1 || return 1
+    out=$("$docker_bin" -H "$docker_socket" ps -q 2>/dev/null) || return 1
+    [ -z "$out" ]
+}
+
+check_docker() {
+    if ! docker_idle; then
+        docker_idle_count=0
+        return
+    fi
+    docker_idle_count=$((docker_idle_count + 1))
+    if [ "$docker_idle_count" -ge "$docker_idle_limit" ]; then
+        pkill -TERM -x dockerd
+        echo "paddock-idle: dockerd stopped after $docker_idle_count idle minutes (restarts on next docker call)"
+        docker_idle_count=0
+    fi
+}
+
+while true; do
+    check_desktop
+    check_docker
+    sleep 60
+done

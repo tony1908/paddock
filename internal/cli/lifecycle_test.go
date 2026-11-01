@@ -597,3 +597,58 @@ func TestTagFlagsOnNewListAndUpdate(t *testing.T) {
 		t.Error("update accepted --tag with --clear-tags")
 	}
 }
+
+func TestNewHeadlessResolutionAndIdleStopBody(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		_, _ = io.WriteString(w, `{"sandbox":{"id":"bx_headless0001","state":"ready"}}`)
+	}))
+	defer server.Close()
+	app := CLI{Out: io.Discard, Err: io.Discard, ConfigPath: filepath.Join(t.TempDir(), "config.json"), HTTPClient: server.Client(), BaseURL: server.URL}
+
+	// -e wins over the flag-derived value for the same key.
+	err := app.Run(context.Background(), []string{"new", "--headless", "--resolution", "1280x720", "-e", "PADDOCK_RESOLUTION=800x600"})
+	if err != nil {
+		t.Fatalf("Run new headless: %v", err)
+	}
+	env, _ := body["env"].(map[string]any)
+	if env["PADDOCK_HEADLESS"] != "1" || env["PADDOCK_RESOLUTION"] != "800x600" {
+		t.Fatalf("env = %#v, want PADDOCK_HEADLESS=1 and explicit -e resolution", env)
+	}
+	if _, ok := body["idleStopSeconds"]; ok {
+		t.Fatalf("omitted idle-stop should not be sent: %#v", body)
+	}
+
+	body = nil
+	if err := app.Run(context.Background(), []string{"new", "--resolution", "1280x720"}); err != nil {
+		t.Fatalf("Run new resolution: %v", err)
+	}
+	env, _ = body["env"].(map[string]any)
+	if env["PADDOCK_RESOLUTION"] != "1280x720" || env["PADDOCK_HEADLESS"] != nil {
+		t.Fatalf("env = %#v, want only PADDOCK_RESOLUTION=1280x720", env)
+	}
+
+	body = nil
+	if err := app.Run(context.Background(), []string{"new", "--no-auto-stop"}); err != nil {
+		t.Fatalf("Run new no-auto-stop: %v", err)
+	}
+	if value, ok := body["idleStopSeconds"]; !ok || value != nil {
+		t.Fatalf("no-auto-stop idleStopSeconds = %#v (present %v), want explicit null", value, ok)
+	}
+}
+
+func TestNewRejectsBadResolution(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("bad resolution must not reach the server: %s %s", r.Method, r.URL.Path)
+	}))
+	defer server.Close()
+	app := CLI{Out: io.Discard, Err: io.Discard, ConfigPath: filepath.Join(t.TempDir(), "config.json"), HTTPClient: server.Client(), BaseURL: server.URL}
+	for _, value := range []string{"1280", "99x720", "1280x720p", "1280X720", "12800x720"} {
+		if err := app.Run(context.Background(), []string{"new", "--resolution", value}); err == nil || !strings.Contains(err.Error(), "--resolution") {
+			t.Errorf("--resolution %q error = %v, want validation error", value, err)
+		}
+	}
+}

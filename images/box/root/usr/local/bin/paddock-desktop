@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# On-demand XFCE desktop control: paddock-desktop start|stop|status (run as root).
+set -uo pipefail
+
+env_file=/run/paddock/env
+lock=/run/paddock-desktop.lock
+container_env=/run/s6/container_environment
+
+# Prints the value of KEY from env_file (KEY=VALUE, optional export prefix and quotes); last match wins.
+env_value() {
+    local key=$1 line value="" found=1
+    [ -r "$env_file" ] || return 1
+    while IFS= read -r line || [ -n "$line" ]; do
+        line=${line#export }
+        [[ $line == "$key="* ]] || continue
+        value=${line#"$key="}
+        value=${value%\"}
+        value=${value#\"}
+        value=${value%\'}
+        value=${value#\'}
+        found=0
+    done < "$env_file"
+    [ "$found" -eq 0 ] && printf '%s' "$value"
+    return "$found"
+}
+
+desktop_running() {
+    pgrep -u abc -o xfce4-session >/dev/null 2>&1
+}
+
+take_lock() {
+    exec 9>"$lock"
+    if ! flock -w 60 9; then
+        printf '%s\n' 'paddock-desktop: could not take lock' >&2
+        return 1
+    fi
+}
+
+cmd_start() {
+    local headless res i
+    headless=$(env_value PADDOCK_HEADLESS || true)
+    if [ "$headless" = 1 ]; then
+        printf '%s\n' 'desktop disabled (headless box)' >&2
+        return 3
+    fi
+
+    take_lock || return 1
+    if desktop_running; then
+        return 0
+    fi
+
+    res=$(env_value PADDOCK_RESOLUTION || true)
+    if [[ $res =~ ^[0-9]{3,4}x[0-9]{3,4}$ ]]; then
+        printf '%s' "${res%x*}" > "$container_env/SELKIES_MANUAL_WIDTH"
+        printf '%s' "${res#*x}" > "$container_env/SELKIES_MANUAL_HEIGHT"
+    elif [ -n "$res" ]; then
+        printf 'paddock-desktop: ignoring invalid PADDOCK_RESOLUTION=%s\n' "$res" >&2
+    fi
+
+    if ! /command/s6-rc -u change svc-de svc-selkies; then
+        printf '%s\n' 'paddock-desktop: s6-rc could not start the desktop' >&2
+        return 1
+    fi
+
+    for ((i = 0; i < 30; i++)); do
+        desktop_running && return 0
+        sleep 1
+    done
+    printf '%s\n' 'paddock-desktop: desktop did not start within 30 seconds' >&2
+    return 1
+}
+
+cmd_stop() {
+    take_lock || return 1
+    /command/s6-rc -d change svc-xorg svc-pulseaudio svc-dbus svc-xsettingsd svc-watchdog
+}
+
+cmd_status() {
+    if desktop_running; then
+        printf '%s\n' running
+        return 0
+    fi
+    printf '%s\n' stopped
+    return 1
+}
+
+case "${1:-}" in
+    start) cmd_start ;;
+    stop) cmd_stop ;;
+    status) cmd_status ;;
+    *) printf '%s\n' 'usage: paddock-desktop start|stop|status' >&2; exit 2 ;;
+esac

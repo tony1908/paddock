@@ -368,3 +368,40 @@ func TestSandboxListFiltersByTags(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateSandboxDefaultIdleStop(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	srv.cfg.DefaultIdleStop = 30 * time.Minute
+	httpServer := httptest.NewServer(srv.Handler())
+	defer httpServer.Close()
+	const nodeID, boxID, nodeToken = "nd_idledefault", "bx_idledefault1", "idle-default-token"
+	seedPlatformBox(t, srv, nodeID, boxID, nodeToken, "", "")
+	token := addPlatformSession(t, srv)
+	serveFakeAgent(t, srv, httpServer, nodeID, boxID, nodeToken, "", http.StatusOK)
+
+	var omitted map[string]any
+	requestJSON(t, httpServer.Client(), http.MethodPost, httpServer.URL+"/api/v1/sandboxes", token,
+		map[string]any{}, http.StatusCreated, &omitted)
+	if got := omitted["idleStopSeconds"]; got != float64(1800) {
+		t.Fatalf("omitted idleStopSeconds = %v, want 1800", got)
+	}
+
+	var explicitNull map[string]any
+	requestJSON(t, httpServer.Client(), http.MethodPost, httpServer.URL+"/api/v1/sandboxes", token,
+		map[string]any{"idleStopSeconds": nil}, http.StatusCreated, &explicitNull)
+	if got := explicitNull["idleStopSeconds"]; got != nil {
+		t.Fatalf("explicit null idleStopSeconds = %v, want null", got)
+	}
+}
+
+func TestNewRejectsDefaultIdleStopBelowMinimum(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/server.db")
+	if err != nil {
+		t.Fatalf("open test store: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+	if _, err := New(Config{Store: st, DataDir: t.TempDir(), DefaultIdleStop: time.Minute}); err == nil {
+		t.Fatal("New accepted a default idle stop below 5m")
+	}
+}

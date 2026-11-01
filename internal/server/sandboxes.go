@@ -251,7 +251,7 @@ func (s *Server) provisionSandbox(ctx context.Context, input createSandboxReques
 	if err != nil {
 		return types.Box{}, err
 	}
-	idleStop, err := parseIdleStopSeconds(input.IdleStopSeconds, 0)
+	idleStop, err := parseIdleStopSeconds(input.IdleStopSeconds, int64(s.cfg.DefaultIdleStop/time.Second))
 	if err != nil {
 		return types.Box{}, err
 	}

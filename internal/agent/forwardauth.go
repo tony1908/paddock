@@ -1,15 +1,57 @@
 package agent
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 )
+
+const desktopStartDebounce = 10 * time.Second
+
+// desktopStart is the background desktop start state of one box; guarded by Agent.desktopStartMu.
+type desktopStart struct {
+	running bool
+	last    time.Time
+}
+
+// startDesktopInBackground starts the box desktop off the request path. At most one start runs per box,
+// and no new start is attempted within desktopStartDebounce of the last attempt.
+// ponytail: desktopStarts keeps one entry per box ID seen on this node and is never pruned.
+func (a *Agent) startDesktopInBackground(boxID string) {
+	a.desktopStartMu.Lock()
+	state := a.desktopStarts[boxID]
+	if state == nil {
+		state = &desktopStart{}
+		a.desktopStarts[boxID] = state
+	}
+	if state.running || time.Since(state.last) < desktopStartDebounce {
+		a.desktopStartMu.Unlock()
+		return
+	}
+	state.running = true
+	state.last = time.Now()
+	a.desktopStartMu.Unlock()
+
+	go func() {
+		defer func() {
+			a.desktopStartMu.Lock()
+			state.running = false
+			a.desktopStartMu.Unlock()
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if _, err := a.ensureDesktop(ctx, boxName(boxID)); err != nil {
+			log.Printf("box desktop start box=%s error=%q", boxID, err)
+		}
+	}()
+}
 
 // ForwardAuthHandler returns the local-only Traefik forward-auth endpoint.
 func (a *Agent) ForwardAuthHandler() http.Handler {
@@ -58,6 +100,9 @@ func (a *Agent) forwardAuthRequest(w http.ResponseWriter, r *http.Request) {
 			cookie.MaxAge = remaining
 		}
 		http.SetCookie(w, cookie)
+	}
+	if credential.desktop {
+		a.startDesktopInBackground(credential.boxID)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

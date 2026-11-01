@@ -6,9 +6,19 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"time"
 )
 
-var errDesktopNotRunning = errors.New("box desktop session is not running")
+var (
+	errDesktopNotRunning = errors.New("box desktop session is not running")
+	errDesktopDisabled   = errors.New("box desktop is disabled")
+)
+
+const (
+	desktopStartCommand      = "/usr/local/bin/paddock-desktop"
+	desktopStartPollInterval = 500 * time.Millisecond
+	desktopStartTimeout      = 20 * time.Second
+)
 
 // desktopEnvScript prints the environ of the box desktop session. It takes the oldest xfce4-session of abc,
 // else the selkies process, else the first process whose environment has DISPLAY=:1. It exits non-zero if none.
@@ -33,6 +43,44 @@ func (a *Agent) desktopEnv(ctx context.Context, container string) (map[string]st
 		return nil, errDesktopNotRunning
 	}
 	return env, nil
+}
+
+// ensureDesktop starts the desktop with paddock-desktop (idempotent, exits 0 once xfce4-session is up), then returns its env.
+// Exit 3 from paddock-desktop means the box is headless. Images without paddock-desktop exit 126/127 and fall back to desktopEnv alone.
+func (a *Agent) ensureDesktop(ctx context.Context, container string) (map[string]string, error) {
+	code, err := a.docker.Exec(ctx, container, "root", "", nil, []string{desktopStartCommand, "start"}, nil, io.Discard, io.Discard)
+	if err != nil {
+		return nil, err
+	}
+	switch code {
+	case 0:
+	case 3:
+		return nil, errDesktopDisabled
+	case 126, 127:
+		return a.desktopEnv(ctx, container)
+	default:
+		return nil, errDesktopNotRunning
+	}
+	env, err := a.desktopEnv(ctx, container)
+	if !errors.Is(err, errDesktopNotRunning) {
+		return env, err
+	}
+	// ponytail: fixed-interval poll until the session appears; event-driven readiness if this proves slow.
+	ctx, cancel := context.WithTimeout(ctx, desktopStartTimeout)
+	defer cancel()
+	ticker := time.NewTicker(desktopStartPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, errDesktopNotRunning
+		case <-ticker.C:
+		}
+		env, err := a.desktopEnv(ctx, container)
+		if !errors.Is(err, errDesktopNotRunning) {
+			return env, err
+		}
+	}
 }
 
 // desktopEnvFromEnviron extracts the display variables from a NUL-separated environ dump.
